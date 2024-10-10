@@ -29,7 +29,7 @@ contract WETH is ERC20, Ownable {
         emit Withdraw(msg.sender, amount_);
     }
 
-    function receive() external payable {
-        deposit();
-    }
+    // receive() external payable {
+    //     deposit();
+    // }
 }
