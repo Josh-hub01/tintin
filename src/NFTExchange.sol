@@ -33,7 +33,7 @@ contract NFTExchange is ReentrancyGuard {
 
     Listing memory listed = listings[nftContract][tokenId];
 
-    require(listed.listed, 'This NFT is already listed');
+    require(!listed.listed, 'This NFT is already listed');
 
     require(nft.isApprovedForAll(msg.sender, address(this)), 'Contract not approved');
 
