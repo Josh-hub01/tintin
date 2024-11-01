@@ -69,22 +69,18 @@ contract Auction {
 
   function calculateBid(uint bidAmount) internal view returns (uint) {
     bool isInFinalBidWindow = block.timestamp >= auctionEndTime - finalBidWindow;
-    uint bid;
+    uint currentBid = msg.value;
 
+    // Apply a 10% increase to the bid amount
     if (isInFinalBidWindow) {
-      // Apply a 10% increase to the bid amount
-      uint adjustedBid = (msg.value * 110) / 100;
-      if (adjustedBid <= bidAmount) {
-        revert BidNotHighEnough(bidAmount);
-      }
-      bid = adjustedBid;
-    } else {
-      if (msg.value <= bidAmount) {
-        revert BidNotHighEnough(bidAmount);
-      }
-      bid = msg.value;
+      currentBid = (msg.value * 110) / 100;
     }
-    return bid;
+
+    if (currentBid <= bidAmount) {
+      revert BidNotHighEnough(bidAmount);
+    }
+
+    return currentBid;
   }
 
   function withdraw() external returns (bool) {
