@@ -13,50 +13,78 @@ contract Auction {
   mapping(address => uint) public pendingReturns;
   bool ended;
 
-  mapping(address => uint) public prevTimes;
+  mapping(address => uint) public lastBidTimes;
   uint public cooldownTime = 10 minutes;
   uint public extendedTime = 5 minutes;
-  uint public startExtendedTime = 5 minutes;
+  uint public extensionThreshold = 5 minutes;
+  uint public finalBidWindow = 5 minutes;
 
-  event HighestBidIncreased(address bidder, uint amount);
-  event AuctionEnded(address winner, uint amount);
+  event BidIncreased(address bidder, uint amount);
+  event AuctionEnded(address winner, uint highestBid);
 
   error AuctionAlreadyEnded();
   error BidNotHighEnough(uint highestBid);
   error CooldownPeriodNotEnded(uint prevTime);
   error AuctionNotYetEnded();
+  error AuctionEndAlreadyCalled();
+  error TooLate(uint time);
 
-  constructor(uint biddingTime_, address payable beneficiary_) {
-    beneficiary = beneficiary_;
-    auctionEndTime = block.timestamp + biddingTime_;
+  modifier onlyBefore(uint time) {
+    if (block.timestamp >= time) {
+      revert TooLate(time);
+    }
+    _;
   }
 
-  function bid() external payable {
-    if (block.timestamp > auctionEndTime) {
-      revert AuctionAlreadyEnded();
-    }
-    if (msg.value <= highestBid) {
-      revert BidNotHighEnough(highestBid);
-    }
-    if (block.timestamp < (prevTimes[msg.sender] + cooldownTime)) {
-      revert CooldownPeriodNotEnded(prevTimes[msg.sender]);
+  constructor(uint auctionDuration_, address payable beneficiary_) {
+    beneficiary = beneficiary_;
+    auctionEndTime = block.timestamp + auctionDuration_;
+  }
+
+  function bid() public payable onlyBefore(auctionEndTime) {
+    uint lastBidTime = lastBidTimes[msg.sender];
+
+    if (lastBidTime != 0 && (block.timestamp < lastBidTime + cooldownTime)) {
+      revert CooldownPeriodNotEnded(lastBidTime);
     }
 
+    uint currentBid = calculateBid(highestBid);
+
     // Update the previous cooldown time for the sender
-    prevTimes[msg.sender] = block.timestamp;
+    lastBidTimes[msg.sender] = block.timestamp;
 
     if (highestBid != 0) {
       pendingReturns[highestBidder] += highestBid;
     }
 
-    highestBid = msg.value;
     highestBidder = msg.sender;
-    emit HighestBidIncreased(msg.sender, msg.value);
+    highestBid = currentBid;
+    emit BidIncreased(msg.sender, msg.value);
 
     // Extend the auction time if it's within the last extension period
-    if (block.timestamp >= auctionEndTime - startExtendedTime) {
+    if (block.timestamp >= auctionEndTime - extensionThreshold) {
       auctionEndTime += extendedTime;
     }
+  }
+
+  function calculateBid(uint bidAmount) internal view returns (uint) {
+    bool isInFinalBidWindow = block.timestamp >= auctionEndTime - finalBidWindow;
+    uint bid;
+
+    if (isInFinalBidWindow) {
+      // Apply a 10% increase to the bid amount
+      uint adjustedBid = (msg.value * 110) / 100;
+      if (adjustedBid <= bidAmount) {
+        revert BidNotHighEnough(bidAmount);
+      }
+      bid = adjustedBid;
+    } else {
+      if (msg.value <= bidAmount) {
+        revert BidNotHighEnough(bidAmount);
+      }
+      bid = msg.value;
+    }
+    return bid;
   }
 
   function withdraw() external returns (bool) {
@@ -64,22 +92,23 @@ contract Auction {
     if (amount > 0) {
       pendingReturns[msg.sender] = 0;
       payable(msg.sender).transfer(amount);
+      return true;
     }
-    return true;
+    return false;
   }
 
-  function endAuction() external {
+  function finalizeAuction() external {
     if (block.timestamp < auctionEndTime) {
       revert AuctionNotYetEnded();
     }
 
     if (ended) {
-      revert AuctionAlreadyEnded();
+      revert AuctionEndAlreadyCalled();
     }
 
     ended = true;
     emit AuctionEnded(highestBidder, highestBid);
-    
+
     beneficiary.transfer(highestBid);
   }
 }
