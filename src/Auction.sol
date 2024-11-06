@@ -14,9 +14,12 @@ contract Auction {
   bool ended;
 
   mapping(address => uint) public lastBidTimes;
+
   uint public cooldownTime = 10 minutes;
+
   uint public extendedTime = 5 minutes;
   uint public extensionThreshold = 5 minutes;
+
   uint public finalBidWindow = 5 minutes;
 
   event BidIncreased(address bidder, uint amount);
@@ -83,7 +86,7 @@ contract Auction {
     return currentBid;
   }
 
-  function withdraw() external returns (bool) {
+  function withdraw() public returns (bool) {
     uint amount = pendingReturns[msg.sender];
     if (amount > 0) {
       pendingReturns[msg.sender] = 0;
@@ -93,7 +96,7 @@ contract Auction {
     return false;
   }
 
-  function finalizeAuction() external {
+  function endAuction() public {
     if (block.timestamp < auctionEndTime) {
       revert AuctionNotYetEnded();
     }
